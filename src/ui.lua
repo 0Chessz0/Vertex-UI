@@ -70,14 +70,14 @@ function UI:newWindow(title, size, tabs)
 		local tb = TabBar.new(self.theme):create(win.tabRow, tabs)
 		win.tabBar = tb
 
-		-- Auto-create page frames inside win.content keyed by tab id
+		-- All pages start hidden — the deferred tab select in TabBar will show the first one
 		local pages = {}
 		for i, def in ipairs(tabs) do
 			local page = Instance.new("Frame")
 			page.Name  = def.id
 			page.Size  = UDim2.new(1, 0, 1, 0)
 			page.BackgroundTransparency = 1
-			page.Visible = (i == 1)
+			page.Visible = false
 			page.ZIndex  = win.content.ZIndex + 1
 			page.Parent  = win.content
 			pages[def.id] = page
@@ -209,11 +209,11 @@ function UI:_buildDemoWindow()
 
 	self.core:label({
 		Parent = ap, Text = "Theme",
-		TextSize = 12, TextColor3 = t.subtext,
-		Size = UDim2.new(1, 0, 0, 16), Position = UDim2.new(0, 0, 0, 0), ZIndex = az,
+		TextSize = 11, TextColor3 = t.subtext,
+		Size = UDim2.new(1, 0, 0, 14), Position = UDim2.new(0, 0, 0, 0), ZIndex = az,
 	})
 	local dd = self.dropdowns:create(ap, {"Dark", "Light"}, self.theme:get().name)
-	dd.holder.Position = UDim2.new(0, 0, 0, 20)
+	dd.holder.Position = UDim2.new(0, 0, 0, 16)
 	dd.selected:Connect(function(name)
 		self.theme:set(name)
 		self.config:set("theme", name)
@@ -221,13 +221,23 @@ function UI:_buildDemoWindow()
 		self.notifications:push("Theme: " .. name)
 	end)
 
+	-- Separator
+	local asep = Instance.new("Frame")
+	asep.Size = UDim2.new(1, 0, 0, 1)
+	asep.Position = UDim2.new(0, 0, 0, 62)
+	asep.BackgroundColor3 = t.border
+	asep.BackgroundTransparency = 0.5
+	asep.BorderSizePixel = 0
+	asep.ZIndex = az
+	asep.Parent = ap
+
 	self.core:label({
 		Parent = ap, Text = "Accent color",
-		TextSize = 12, TextColor3 = t.subtext,
-		Size = UDim2.new(1, 0, 0, 16), Position = UDim2.new(0, 0, 0, 68), ZIndex = az,
+		TextSize = 11, TextColor3 = t.subtext,
+		Size = UDim2.new(1, 0, 0, 14), Position = UDim2.new(0, 0, 0, 72), ZIndex = az,
 	})
 	local cp = self.colorPickers:create(ap, self.theme:get().accent)
-	cp.holder.Position = UDim2.new(0, 0, 0, 88)
+	cp.holder.Position = UDim2.new(0, 0, 0, 90)
 	cp.changed:Connect(function(color)
 		self.theme:setAccent(color)
 	end)
@@ -236,28 +246,59 @@ function UI:_buildDemoWindow()
 	local ab = win.pages.about
 	local bz = ab.ZIndex + 1
 
+	-- Logo
+	local logoImg = Instance.new("ImageLabel")
+	logoImg.Size              = UDim2.new(0, 52, 0, 52)
+	logoImg.Position          = UDim2.new(0, 0, 0, 0)
+	logoImg.BackgroundTransparency = 1
+	logoImg.Image             = "https://raw.githubusercontent.com/0Chessz0/Vertex-UI/main/assets/logo.png"
+	logoImg.ImageColor3       = t.text
+	logoImg.ScaleType         = Enum.ScaleType.Fit
+	logoImg.ZIndex            = bz
+	logoImg.Parent            = ab
+
 	self.core:label({
 		Parent = ab, Text = "Vertex UI",
-		TextSize = 22, Font = Enum.Font.GothamBold,
-		Size = UDim2.new(1, 0, 0, 30), Position = UDim2.new(0, 0, 0, 0), ZIndex = bz,
+		TextSize = 20, Font = Enum.Font.GothamBold,
+		Size = UDim2.new(1, -64, 0, 26),
+		Position = UDim2.new(0, 64, 0, 4), ZIndex = bz,
 	})
 	self.core:label({
-		Parent = ab, Text = "A macOS-inspired UI library built for\nRoblox script executors.",
-		TextSize = 13, TextColor3 = t.subtext, TextWrapped = true,
-		Size = UDim2.new(1, 0, 0, 44), Position = UDim2.new(0, 0, 0, 36), ZIndex = bz,
+		Parent = ab, Text = "macOS-inspired UI library",
+		TextSize = 12, TextColor3 = t.subtext,
+		Size = UDim2.new(1, -64, 0, 18),
+		Position = UDim2.new(0, 64, 0, 30), ZIndex = bz,
 	})
 
-	local lines = {
-		"Toggle UI    →   Right Ctrl  /  floating button",
-		"Close window →   red traffic light dot",
+	-- Separator
+	local bsep = Instance.new("Frame")
+	bsep.Size = UDim2.new(1, 0, 0, 1)
+	bsep.Position = UDim2.new(0, 0, 0, 64)
+	bsep.BackgroundColor3 = t.border
+	bsep.BackgroundTransparency = 0.5
+	bsep.BorderSizePixel = 0
+	bsep.ZIndex = bz
+	bsep.Parent = ab
+
+	local infoRows = {
+		{ label = "Toggle UI",    value = "Right Ctrl" },
+		{ label = "Close window", value = "Red dot" },
+		{ label = "Minimize",     value = "Yellow dot  →  shade" },
+		{ label = "Maximize",     value = "Green dot  →  fullscreen" },
 	}
-	for i, line in ipairs(lines) do
+	for i, row in ipairs(infoRows) do
+		local y = 76 + (i - 1) * 26
 		self.core:label({
-			Parent = ab, Text = line,
+			Parent = ab, Text = row.label,
 			TextSize = 12, TextColor3 = t.subtext,
-			Size = UDim2.new(1, 0, 0, 18),
-			Position = UDim2.new(0, 0, 0, 88 + (i - 1) * 22),
-			ZIndex = bz,
+			Size = UDim2.new(0.45, 0, 0, 18),
+			Position = UDim2.new(0, 0, 0, y), ZIndex = bz,
+		})
+		self.core:label({
+			Parent = ab, Text = row.value,
+			TextSize = 12, TextColor3 = t.text,
+			Size = UDim2.new(0.55, 0, 0, 18),
+			Position = UDim2.new(0.45, 0, 0, y), ZIndex = bz,
 		})
 	end
 

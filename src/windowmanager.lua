@@ -117,23 +117,69 @@ function WindowManager:createWindow(uiRoot, title, size)
 		Utils.corner(6).Parent = dot
 	end
 
-	-- close button on the red dot
+	-- Traffic light buttons
+	-- close = hide, min = shade to header only, max = toggle expand
+	local minDot   = header:FindFirstChild("min")
+	local maxDot   = header:FindFirstChild("max")
 	local closeDot = header:FindFirstChild("close")
-	if closeDot then
-		local cbtn = Instance.new("TextButton")
-		cbtn.Size = UDim2.new(1,0,1,0)
-		cbtn.BackgroundTransparency = 1
-		cbtn.Text = ""
-		cbtn.ZIndex = z + 5
-		cbtn.Parent = closeDot
-		cbtn.MouseButton1Click:Connect(function()
-			-- fade out and hide
-			Animator.spring(win, "BackgroundTransparency", 1, {stiffness=300, damping=26})
-			task.delay(0.22, function()
-				if win then win.Visible = false; win.BackgroundTransparency = 1 end
-			end)
-		end)
+
+	local minimised = false
+	local maximised = false
+	local savedSize = size
+	local savedPos  = nil   -- set after entrance anim
+
+	local function makeTrafficBtn(dot, fn)
+		if not dot then return end
+		local b = Instance.new("TextButton")
+		b.Size = UDim2.new(1,0,1,0)
+		b.BackgroundTransparency = 1
+		b.Text = ""
+		b.ZIndex = z + 5
+		b.Parent = dot
+		b.MouseButton1Click:Connect(fn)
 	end
+
+	-- Close: fade out + hide
+	makeTrafficBtn(closeDot, function()
+		Animator.spring(win, "BackgroundTransparency", 1, {stiffness=300, damping=26})
+		task.delay(0.22, function()
+			if win then win.Visible = false; win.BackgroundTransparency = 1 end
+		end)
+	end)
+
+	-- Minimise (yellow): shade window down to just the header bar
+	makeTrafficBtn(minDot, function()
+		savedPos = savedPos or win.Position
+		if not minimised then
+			minimised = true
+			-- collapse to header height only
+			Animator.spring(win, "Size", UDim2.new(0, W, 0, H_HEADER), {stiffness=320, damping=28})
+		else
+			minimised = false
+			Animator.spring(win, "Size", maximised
+				and UDim2.new(0, uiRoot.AbsoluteSize.X - 40, 0, uiRoot.AbsoluteSize.Y - 40)
+				or savedSize,
+				{stiffness=320, damping=28}
+			)
+		end
+	end)
+
+	-- Maximise (green): toggle between original size and near-fullscreen
+	makeTrafficBtn(maxDot, function()
+		savedPos = savedPos or win.Position
+		if not maximised then
+			maximised = true
+			minimised = false
+			local sw = uiRoot.AbsoluteSize.X
+			local sh = uiRoot.AbsoluteSize.Y
+			Animator.spring(win, "Size",     UDim2.new(0, sw - 40, 0, sh - 40),    {stiffness=320, damping=28})
+			Animator.spring(win, "Position", UDim2.new(0, 20, 0, 20),              {stiffness=320, damping=28})
+		else
+			maximised = false
+			Animator.spring(win, "Size",     savedSize, {stiffness=320, damping=28})
+			Animator.spring(win, "Position", savedPos,  {stiffness=320, damping=28})
+		end
+	end)
 
 	-- centered title
 	local titleLbl = Instance.new("TextLabel")

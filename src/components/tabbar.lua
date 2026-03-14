@@ -99,8 +99,10 @@ function TabBar:create(tabRow, tabs)
 		btn.MouseButton1Click:Connect(function() select(i) end)
 	end
 
-	-- Select the first tab immediately — no defer needed, pure math
-	select(1)
+	-- Select the first tab on next frame so callers can wire up .selected first
+	task.defer(function()
+		select(1)
+	end)
 
 	return {
 		pill      = pill,
