@@ -19,7 +19,6 @@ end
 -- parent should be the tabRow frame from WindowManager
 function TabBar:create(tabRow, tabs)
 	local theme = self.themeManager:getTheme()
-	local bgCorner = Utils.createCorner(17)
 	local tabCount = #tabs
 	local pillWidth = tabCount * TAB_W + (tabCount - 1) * 4 + 8
 
