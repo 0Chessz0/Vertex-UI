@@ -1,120 +1,88 @@
+-- Spring physics animator. Supports number, Color3, UDim2.
 local RunService = game:GetService("RunService")
+local Animator   = {}
+local springs    = {}
 
-local Animator = {}
-Animator.__index = Animator
-
-local activeSprings = {}
-
-local function stepSpring(state, target, velocity, mass, damping, stiffness, dt)
-	local x = state
-	local v = velocity
-	local k = stiffness
-	local c = damping
-	local m = mass
+local function step(x, target, v, k, c, dt)
 	local f = -k * (x - target) - c * v
-	local a = f / m
-	v = v + a * dt
+	v = v + (f / 1) * dt
 	x = x + v * dt
 	return x, v
 end
 
-local function ensureDriver()
-	if Animator._driving then
-		return
-	end
-	Animator._driving = true
+local function settled(x, t, v)
+	return math.abs(x - t) < 0.001 and math.abs(v) < 0.001
+end
+
+local running = false
+local function ensureLoop()
+	if running then return end
+	running = true
 	RunService.Heartbeat:Connect(function(dt)
-		for key, spring in pairs(activeSprings) do
-			local value = spring.value
-			local target = spring.target
-			local velocity = spring.velocity
-			local mass = spring.mass
-			local damping = spring.damping
-			local stiffness = spring.stiffness
-			if typeof(value) == "number" then
-				local x, v = stepSpring(value, target, velocity, mass, damping, stiffness, dt)
-				spring.value = x
-				spring.velocity = v
-				spring.setter(x)
-				if math.abs(x - target) < 0.001 and math.abs(v) < 0.001 then
-					activeSprings[key] = nil
+		for key, s in pairs(springs) do
+			local vt, tt = s.value, s.target
+			if typeof(vt) == "number" then
+				local nx, nv = step(vt, tt, s.vel, s.k, s.c, dt)
+				s.value, s.vel = nx, nv
+				s.set(nx)
+				if settled(nx, tt, nv) then springs[key] = nil end
+
+			elseif typeof(vt) == "Color3" then
+				local vv = s.vel
+				local nr, vr = step(vt.R, tt.R, vv.X, s.k, s.c, dt)
+				local ng, vg = step(vt.G, tt.G, vv.Y, s.k, s.c, dt)
+				local nb, vb = step(vt.B, tt.B, vv.Z, s.k, s.c, dt)
+				local nc = Color3.new(nr, ng, nb)
+				s.value = nc
+				s.vel   = Vector3.new(vr, vg, vb)
+				s.set(nc)
+				if settled(nr,tt.R,vr) and settled(ng,tt.G,vg) and settled(nb,tt.B,vb) then
+					springs[key] = nil
 				end
-			elseif typeof(value) == "Color3" then
-				local r, vr = stepSpring(value.R, target.R, velocity.R, mass, damping, stiffness, dt)
-				local g, vg = stepSpring(value.G, target.G, velocity.G, mass, damping, stiffness, dt)
-				local b, vb = stepSpring(value.B, target.B, velocity.B, mass, damping, stiffness, dt)
-				local new = Color3.new(r, g, b)
-				spring.value = new
-				spring.velocity = Vector3.new(vr, vg, vb)
-				spring.setter(new)
-				if (new - target).magnitude < 0.001 and spring.velocity.Magnitude < 0.001 then
-					activeSprings[key] = nil
-				end
-			elseif typeof(value) == "UDim2" then
-				local sx, svx = stepSpring(value.X.Scale, target.X.Scale, velocity.X.Scale, mass, damping, stiffness, dt)
-				local ox, ovx = stepSpring(value.X.Offset, target.X.Offset, velocity.X.Offset, mass, damping, stiffness, dt)
-				local sy, svy = stepSpring(value.Y.Scale, target.Y.Scale, velocity.Y.Scale, mass, damping, stiffness, dt)
-				local oy, ovy = stepSpring(value.Y.Offset, target.Y.Offset, velocity.Y.Offset, mass, damping, stiffness, dt)
-				local new = UDim2.new(sx, ox, sy, oy)
-				spring.value = new
-				spring.velocity = {
-					X = { Scale = svx, Offset = ovx },
-					Y = { Scale = svy, Offset = ovy },
-				}
-				spring.setter(new)
-				local delta = Vector4.new(
-					target.X.Scale - sx,
-					target.X.Offset - ox,
-					target.Y.Scale - sy,
-					target.Y.Offset - oy
-				)
-				local vmag = math.abs(svx) + math.abs(ovx) + math.abs(svy) + math.abs(ovy)
-				if (math.abs(delta.X) + math.abs(delta.Y) + math.abs(delta.Z) + math.abs(delta.W)) < 0.001 and vmag < 0.001 then
-					activeSprings[key] = nil
+
+			elseif typeof(vt) == "UDim2" then
+				local vv = s.vel
+				local nxs,vxs = step(vt.X.Scale,  tt.X.Scale,  vv[1], s.k, s.c, dt)
+				local nxo,vxo = step(vt.X.Offset, tt.X.Offset, vv[2], s.k, s.c, dt)
+				local nys,vys = step(vt.Y.Scale,  tt.Y.Scale,  vv[3], s.k, s.c, dt)
+				local nyo,vyo = step(vt.Y.Offset, tt.Y.Offset, vv[4], s.k, s.c, dt)
+				local nu = UDim2.new(nxs, nxo, nys, nyo)
+				s.value = nu
+				s.vel   = {vxs, vxo, vys, vyo}
+				s.set(nu)
+				if settled(nxs,tt.X.Scale,vxs) and settled(nxo,tt.X.Offset,vxo)
+				and settled(nys,tt.Y.Scale,vys) and settled(nyo,tt.Y.Offset,vyo) then
+					springs[key] = nil
 				end
 			end
 		end
 	end)
 end
 
-local function springKey(instance, property)
-	return tostring(instance) .. ":" .. property
-end
+function Animator.spring(instance, prop, target, opts)
+	ensureLoop()
+	local k   = (opts and opts.stiffness) or 200
+	local c   = (opts and opts.damping)   or 20
+	local cur = instance[prop]
+	local vel
+	if     typeof(cur) == "number" then vel = 0
+	elseif typeof(cur) == "Color3" then vel = Vector3.new()
+	elseif typeof(cur) == "UDim2"  then vel = {0,0,0,0}
+	else return end
 
-function Animator.spring(instance, property, target, options)
-	ensureDriver()
-	local key = springKey(instance, property)
-	local current = instance[property]
-	local mass = options and options.mass or 1
-	local damping = options and options.damping or 18
-	local stiffness = options and options.stiffness or 180
-	local velocity
-	if typeof(current) == "number" then
-		velocity = 0
-	elseif typeof(current) == "Color3" then
-		velocity = Vector3.new()
-	elseif typeof(current) == "UDim2" then
-		velocity = {
-			X = { Scale = 0, Offset = 0 },
-			Y = { Scale = 0, Offset = 0 },
-		}
-	end
-	activeSprings[key] = {
-		value = current,
-		target = target,
-		velocity = velocity,
-		mass = mass,
-		damping = damping,
-		stiffness = stiffness,
-		setter = function(val)
-			instance[property] = val
-		end,
+	-- preserve existing velocity if same spring is already running
+	local key = tostring(instance) .. prop
+	if springs[key] then vel = springs[key].vel end
+
+	springs[key] = {
+		value = cur, target = target,
+		vel = vel, k = k, c = c,
+		set = function(v) instance[prop] = v end,
 	}
 end
 
-function Animator.stop(instance, property)
-	activeSprings[springKey(instance, property)] = nil
+function Animator.stop(instance, prop)
+	springs[tostring(instance) .. prop] = nil
 end
 
 return Animator
-

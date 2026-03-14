@@ -1,114 +1,134 @@
 local Animator = _VertexRequire("src/animator.lua")
-local Utils = _VertexRequire("src/utils.lua")
-local Signal = _VertexRequire("src/signal.lua")
+local Utils    = _VertexRequire("src/utils.lua")
+local Signal   = _VertexRequire("src/signal.lua")
 
 local Dropdown = {}
 Dropdown.__index = Dropdown
 
-function Dropdown.new(themeManager, core)
-	local self = setmetatable({}, Dropdown)
-	self.themeManager = themeManager
-	self.core = core
-	return self
+function Dropdown.new(theme, core)
+	return setmetatable({ theme = theme, core = core }, Dropdown)
 end
 
-function Dropdown:create(parent, items, defaultText)
-	local theme = self.themeManager:getTheme()
+local ITEM_H = 28
+
+function Dropdown:create(parent, items, default)
+	local t = self.theme:get()
+
 	local holder = Instance.new("Frame")
-	holder.Name = "Dropdown"
-	holder.Size = UDim2.new(0, 180, 0, 30)
+	holder.Name  = "Dropdown"
+	holder.Size  = UDim2.new(0, 200, 0, 34)
 	holder.BackgroundTransparency = 1
 	holder.ZIndex = parent.ZIndex + 1
 	holder.Parent = parent
-	local button = Instance.new("TextButton")
-	button.Name = "Button"
-	button.Size = UDim2.new(1, 0, 1, 0)
-	button.BackgroundColor3 = theme.layer
-	button.BackgroundTransparency = 0.4
-	button.AutoButtonColor = false
-	button.Font = Enum.Font.Gotham
-	button.TextSize = 14
-	button.TextXAlignment = Enum.TextXAlignment.Left
-	button.TextColor3 = theme.text
-	button.Text = defaultText or (items[1] or "")
-	button.ZIndex = holder.ZIndex + 1
-	button.Parent = holder
-	local corner = Utils.createCorner(10)
-	corner.Parent = button
-	local stroke = Utils.createStroke(1, theme.border, 0.4)
-	stroke.Parent = button
+
+	-- Main button
+	local btn = Instance.new("TextButton")
+	btn.Name   = "Btn"
+	btn.Size   = UDim2.new(1, 0, 1, 0)
+	btn.BackgroundColor3 = t.surface
+	btn.BackgroundTransparency = 0.30
+	btn.AutoButtonColor = false
+	btn.Font   = Enum.Font.Gotham
+	btn.TextSize = 13
+	btn.TextXAlignment = Enum.TextXAlignment.Left
+	btn.TextColor3 = t.text
+	btn.Text   = "  " .. (default or items[1] or "")
+	btn.ZIndex = holder.ZIndex + 1
+	btn.Parent = holder
+	Utils.corner(9).Parent  = btn
+	Utils.stroke(1, t.border, 0.45).Parent = btn
+
+	-- Arrow
 	local arrow = Instance.new("TextLabel")
 	arrow.BackgroundTransparency = 1
-	arrow.Size = UDim2.new(0, 24, 1, 0)
-	arrow.Position = UDim2.new(1, -24, 0, 0)
-	arrow.Font = Enum.Font.Gotham
-	arrow.TextSize = 18
-	arrow.Text = "⌄"
-	arrow.TextColor3 = theme.mutedText
-	arrow.ZIndex = button.ZIndex + 1
-	arrow.Parent = button
-	local listFrame = Instance.new("Frame")
-	listFrame.Name = "List"
-	listFrame.Size = UDim2.new(1, 0, 0, 0)
-	listFrame.Position = UDim2.new(0, 0, 1, 4)
-	listFrame.BackgroundColor3 = theme.layer
-	listFrame.BackgroundTransparency = 0.4
-	listFrame.BorderSizePixel = 0
-	listFrame.ClipsDescendants = true
-	listFrame.ZIndex = button.ZIndex + 10
-	listFrame.Parent = holder
-	local listCorner = Utils.createCorner(10)
-	listCorner.Parent = listFrame
-	local listStroke = Utils.createStroke(1, theme.border, 0.4)
-	listStroke.Parent = listFrame
-	local layout = Instance.new("UIListLayout")
-	layout.FillDirection = Enum.FillDirection.Vertical
-	layout.Padding = UDim.new(0, 2)
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Parent = listFrame
-	local selectedSignal = Signal.new()
-	local itemHeight = 26
+	arrow.Size   = UDim2.new(0, 28, 1, 0)
+	arrow.Position = UDim2.new(1, -28, 0, 0)
+	arrow.Font   = Enum.Font.GothamBold
+	arrow.TextSize = 12
+	arrow.Text   = "▾"
+	arrow.TextColor3 = t.subtext
+	arrow.ZIndex = btn.ZIndex + 1
+	arrow.Parent = btn
+
+	-- List (hidden, grows downward)
+	local list = Instance.new("Frame")
+	list.Name   = "List"
+	list.Size   = UDim2.new(1, 0, 0, 0)
+	list.Position = UDim2.new(0, 0, 1, 4)
+	list.BackgroundColor3 = t.surface
+	list.BackgroundTransparency = 0.18
+	list.BorderSizePixel = 0
+	list.ClipsDescendants = true
+	list.ZIndex = holder.ZIndex + 20
+	list.Parent = holder
+	Utils.corner(9).Parent = list
+	Utils.stroke(1, t.border, 0.40).Parent = list
+
+	local layout = Utils.listLayout(Enum.FillDirection.Vertical, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Top, 2)
+	layout.Parent = list
+	Utils.padding(0, 4, 4, 4, 4).Parent = list
+
+	local sig  = Signal.new()
+	local open = false
+	local fullH = #items * (ITEM_H + 2) + 8
+
 	for _, text in ipairs(items) do
 		local item = Instance.new("TextButton")
-		item.Name = "Item"
-		item.AutoButtonColor = false
-		item.Size = UDim2.new(1, -8, 0, itemHeight)
-		item.Position = UDim2.new(0, 4, 0, 0)
-		item.BackgroundColor3 = theme.layer
+		item.Size  = UDim2.new(1, 0, 0, ITEM_H)
+		item.BackgroundColor3 = t.surfaceHigh
 		item.BackgroundTransparency = 1
-		item.Text = text
-		item.Font = Enum.Font.Gotham
-		item.TextSize = 14
-		item.TextColor3 = theme.text
-		item.ZIndex = listFrame.ZIndex + 1
-		item.Parent = listFrame
+		item.AutoButtonColor = false
+		item.Font  = Enum.Font.Gotham
+		item.TextSize = 13
+		item.TextColor3 = t.text
+		item.Text  = text
+		item.TextXAlignment = Enum.TextXAlignment.Left
+		item.ZIndex = list.ZIndex + 1
+		item.Parent = list
+		Utils.corner(7).Parent = item
+		Utils.padding(0, 8, 8, 0, 0).Parent = item
+
+		item.MouseEnter:Connect(function()
+			Animator.spring(item, "BackgroundTransparency", 0.55, {stiffness=280, damping=24})
+		end)
+		item.MouseLeave:Connect(function()
+			Animator.spring(item, "BackgroundTransparency", 1, {stiffness=280, damping=24})
+		end)
 		item.MouseButton1Click:Connect(function()
-			button.Text = text
-			selectedSignal:Fire(text)
-			Animator.spring(listFrame, "Size", UDim2.new(1, 0, 0, 0), {
-				damping = 22,
-				stiffness = 260,
-			})
+			btn.Text = "  " .. text
+			sig:Fire(text)
+			open = false
+			Animator.spring(list, "Size", UDim2.new(1, 0, 0, 0), {stiffness=320, damping=28})
+			Animator.spring(arrow, "Rotation", 0, {stiffness=320, damping=28})
 		end)
 	end
-	local open = false
-	button.MouseButton1Click:Connect(function()
+
+	btn.MouseButton1Click:Connect(function()
 		open = not open
-		local targetHeight = open and (#items * (itemHeight + 2) + 8) or 0
-		Animator.spring(listFrame, "Size", UDim2.new(1, 0, 0, targetHeight), {
-			damping = 22,
-			stiffness = 260,
-		})
-		Animator.spring(button, "BackgroundTransparency", open and 0.25 or 0.4, {
-			damping = 22,
-			stiffness = 260,
-		})
+		Animator.spring(list, "Size",
+			open and UDim2.new(1, 0, 0, fullH) or UDim2.new(1, 0, 0, 0),
+			{stiffness=320, damping=28}
+		)
+		Animator.spring(arrow, "Rotation", open and 180 or 0, {stiffness=320, damping=28})
+		Animator.spring(btn, "BackgroundTransparency", open and 0.15 or 0.30, {stiffness=280, damping=24})
 	end)
-	return {
-		holder = holder,
-		selected = selectedSignal,
-	}
+
+	-- close on outside click
+	game:GetService("UserInputService").InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 and open then
+			-- a short delay so the button's own click fires first
+			task.delay(0.02, function()
+				if open then
+					open = false
+					Animator.spring(list, "Size", UDim2.new(1, 0, 0, 0), {stiffness=320, damping=28})
+					Animator.spring(arrow, "Rotation", 0, {stiffness=320, damping=28})
+					Animator.spring(btn, "BackgroundTransparency", 0.30, {stiffness=280, damping=24})
+				end
+			end)
+		end
+	end)
+
+	return { holder = holder, selected = sig }
 end
 
 return Dropdown
-

@@ -1,112 +1,107 @@
 local Animator = _VertexRequire("src/animator.lua")
-local Utils = _VertexRequire("src/utils.lua")
-local Signal = _VertexRequire("src/signal.lua")
+local Utils    = _VertexRequire("src/utils.lua")
+local Signal   = _VertexRequire("src/signal.lua")
 
 local Dialog = {}
 Dialog.__index = Dialog
 
-function Dialog.new(themeManager, uiRoot, core, effects)
-	local self = setmetatable({}, Dialog)
-	self.themeManager = themeManager
-	self.uiRoot = uiRoot
-	self.core = core
-	self.effects = effects
-	return self
+function Dialog.new(theme, uiRoot, core, effects)
+	return setmetatable({ theme = theme, uiRoot = uiRoot, core = core, effects = effects }, Dialog)
 end
 
 function Dialog:show(title, message, buttons)
-	local theme = self.themeManager:getTheme()
+	local t = self.theme:get()
+	buttons = buttons or {{ id = "ok", label = "OK", primary = true }}
+
+	-- Dim overlay
 	local overlay = Instance.new("Frame")
-	overlay.Name = "VertexDialogOverlay"
-	overlay.BackgroundColor3 = Color3.new(0, 0, 0)
+	overlay.Name  = "Overlay"
+	overlay.Size  = UDim2.new(1, 0, 1, 0)
+	overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 	overlay.BackgroundTransparency = 1
 	overlay.BorderSizePixel = 0
-	overlay.Size = UDim2.new(1, 0, 1, 0)
-	overlay.ZIndex = 900
-	overlay.Parent = self.uiRoot
+	overlay.ZIndex  = 960
+	overlay.Active  = true
+	overlay.Parent  = self.uiRoot
+	overlay.InputBegan:Connect(function() end)  -- swallow clicks
+
+	-- Modal card
 	local modal = Instance.new("Frame")
-	modal.Name = "Dialog"
-	modal.Size = UDim2.new(0, 360, 0, 180)
+	modal.Name  = "Dialog"
+	modal.Size  = UDim2.new(0, 360, 0, 190)
 	modal.AnchorPoint = Vector2.new(0.5, 0.5)
-	modal.Position = UDim2.new(0.5, 0, 0.5, 40)
-	modal.BackgroundColor3 = theme.layer
-	modal.BackgroundTransparency = 0.4
+	modal.Position    = UDim2.new(0.5, 0, 0.5, 24)
+	modal.BackgroundTransparency = 1
 	modal.BorderSizePixel = 0
-	modal.ZIndex = overlay.ZIndex + 1
-	modal.Parent = overlay
-	self.effects:applyGlass(modal, theme.name == "Light")
-	local titleLabel = self.core:createTextLabel({
-		Parent = modal,
-		Text = title or "Alert",
-		TextSize = 16,
-		Size = UDim2.new(1, -32, 0, 26),
-		Position = UDim2.new(0, 16, 0, 16),
-		ZIndex = modal.ZIndex + 1,
-	})
-	local messageLabel = self.core:createTextLabel({
-		Parent = modal,
-		Text = message or "",
-		TextSize = 14,
-		Size = UDim2.new(1, -32, 0, 60),
-		Position = UDim2.new(0, 16, 0, 48),
-		ZIndex = modal.ZIndex + 1,
-	})
-	messageLabel.TextWrapped = true
-	local buttonRow = Instance.new("Frame")
-	buttonRow.Name = "Buttons"
-	buttonRow.Size = UDim2.new(1, -32, 0, 32)
-	buttonRow.Position = UDim2.new(0, 16, 1, -48)
-	buttonRow.BackgroundTransparency = 1
-	buttonRow.ZIndex = modal.ZIndex + 1
-	buttonRow.Parent = modal
-	local layout = Instance.new("UIListLayout")
-	layout.FillDirection = Enum.FillDirection.Horizontal
-	layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-	layout.Padding = UDim.new(0, 8)
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Parent = buttonRow
+	modal.ZIndex  = overlay.ZIndex + 1
+	modal.Parent  = overlay
+	self.effects:glass(modal, 14)
+
+	-- Title
+	local titleLbl = Instance.new("TextLabel")
+	titleLbl.BackgroundTransparency = 1
+	titleLbl.Size   = UDim2.new(1, -32, 0, 26)
+	titleLbl.Position = UDim2.new(0, 16, 0, 16)
+	titleLbl.Font   = Enum.Font.GothamSemibold
+	titleLbl.TextSize = 15
+	titleLbl.TextColor3 = t.text
+	titleLbl.Text   = title or "Alert"
+	titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+	titleLbl.ZIndex = modal.ZIndex + 2
+	titleLbl.Parent = modal
+
+	-- Message
+	local msgLbl = Instance.new("TextLabel")
+	msgLbl.BackgroundTransparency = 1
+	msgLbl.Size    = UDim2.new(1, -32, 0, 56)
+	msgLbl.Position = UDim2.new(0, 16, 0, 48)
+	msgLbl.Font    = Enum.Font.Gotham
+	msgLbl.TextSize = 13
+	msgLbl.TextColor3 = t.subtext
+	msgLbl.Text    = message or ""
+	msgLbl.TextWrapped = true
+	msgLbl.TextXAlignment = Enum.TextXAlignment.Left
+	msgLbl.TextYAlignment = Enum.TextYAlignment.Top
+	msgLbl.ZIndex  = modal.ZIndex + 2
+	msgLbl.Parent  = modal
+
+	-- Button row
+	local btnRow = Instance.new("Frame")
+	btnRow.BackgroundTransparency = 1
+	btnRow.Size   = UDim2.new(1, -32, 0, 36)
+	btnRow.Position = UDim2.new(0, 16, 1, -52)
+	btnRow.ZIndex = modal.ZIndex + 2
+	btnRow.Parent = modal
+	local layout = Utils.listLayout(Enum.FillDirection.Horizontal, Enum.HorizontalAlignment.Right, Enum.VerticalAlignment.Center, 8)
+	layout.Parent = btnRow
+
 	local chosen = Signal.new()
-	local definitions = buttons or {
-		{ id = "ok", label = "OK", primary = true },
-	}
-	for _, def in ipairs(definitions) do
-		local created = self.core:createButton({
-			Parent = buttonRow,
-			Text = def.label,
-			Size = UDim2.new(0, 90, 0, 30),
-			Accent = def.primary or false,
-			ZIndex = buttonRow.ZIndex + 1,
+
+	local function dismiss()
+		Animator.spring(overlay, "BackgroundTransparency", 1, {stiffness=280, damping=26})
+		Animator.spring(modal, "Position", UDim2.new(0.5, 0, 0.5, 40), {stiffness=280, damping=26})
+		task.delay(0.28, function() if overlay then overlay:Destroy() end end)
+	end
+
+	for _, def in ipairs(buttons) do
+		local b = self.core:button({
+			Parent  = btnRow,
+			Text    = def.label,
+			Size    = UDim2.new(0, 88, 0, 32),
+			Accent  = def.primary or false,
+			ZIndex  = btnRow.ZIndex + 1,
 		})
-		created.activated:Connect(function()
+		b.activated:Connect(function()
 			chosen:Fire(def.id)
-			Animator.spring(modal, "Position", UDim2.new(0.5, 0, 0.5, 70), {
-				damping = 22,
-				stiffness = 260,
-			})
-			Animator.spring(overlay, "BackgroundTransparency", 1, {
-				damping = 22,
-				stiffness = 260,
-			})
-			task.delay(0.25, function()
-				if overlay then
-					overlay:Destroy()
-				end
-			end)
+			dismiss()
 		end)
 	end
-	overlay.Active = true
-	overlay.InputBegan:Connect(function() end)
-	overlay.BackgroundTransparency = 1
-	Animator.spring(overlay, "BackgroundTransparency", 0.4, {
-		damping = 22,
-		stiffness = 260,
-	})
-	Animator.spring(modal, "Position", UDim2.new(0.5, 0, 0.5, 0), {
-		damping = 22,
-		stiffness = 260,
-	})
+
+	-- Entrance
+	Animator.spring(overlay, "BackgroundTransparency", 0.55, {stiffness=280, damping=26})
+	Animator.spring(modal, "Position", UDim2.new(0.5, 0, 0.5, 0), {stiffness=280, damping=26})
+
 	return chosen
 end
 
 return Dialog
-

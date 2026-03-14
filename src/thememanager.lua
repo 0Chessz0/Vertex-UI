@@ -3,80 +3,79 @@ local Utils = _VertexRequire("src/utils.lua")
 local ThemeManager = {}
 ThemeManager.__index = ThemeManager
 
-local defaultDark = {
-	name = "Dark",
-	background    = Color3.fromRGB(10, 10, 16),
-	header        = Color3.fromRGB(18, 18, 26),
-	layer         = Color3.fromRGB(22, 22, 32),
-	layerHover    = Color3.fromRGB(32, 32, 46),
-	border        = Color3.fromRGB(55, 55, 75),
-	separator     = Color3.fromRGB(40, 40, 58),
-	text          = Color3.fromRGB(235, 235, 245),
-	mutedText     = Color3.fromRGB(140, 140, 165),
-	glassTop      = Color3.fromRGB(38, 38, 54),
-	glassBottom   = Color3.fromRGB(12, 12, 20),
-	glassOpacity  = 0.08,
-	accent        = Utils.hexToColor3("#0A84FF"),
-	accentGlow    = Utils.hexToColor3("#0A84FF"),
-}
-
-local defaultLight = {
-	name = "Light",
-	background    = Color3.fromRGB(235, 235, 242),
-	header        = Color3.fromRGB(248, 248, 252),
-	layer         = Color3.fromRGB(255, 255, 255),
-	layerHover    = Color3.fromRGB(240, 240, 248),
-	border        = Color3.fromRGB(195, 195, 210),
-	separator     = Color3.fromRGB(215, 215, 228),
-	text          = Color3.fromRGB(18, 18, 26),
-	mutedText     = Color3.fromRGB(105, 105, 122),
-	glassTop      = Color3.fromRGB(255, 255, 255),
-	glassBottom   = Color3.fromRGB(220, 220, 232),
-	glassOpacity  = 0.12,
-	accent        = Utils.hexToColor3("#0A84FF"),
-	accentGlow    = Utils.hexToColor3("#0A84FF"),
+-- Each theme: bg, surface, surfaceHigh, border, text, subtext, accent
+local THEMES = {
+	Dark = {
+		name       = "Dark",
+		bg         = Color3.fromRGB( 12,  12,  18),
+		surface    = Color3.fromRGB( 24,  24,  36),
+		surfaceHigh= Color3.fromRGB( 34,  34,  50),
+		border     = Color3.fromRGB( 58,  58,  82),
+		text       = Color3.fromRGB(232, 232, 245),
+		subtext    = Color3.fromRGB(138, 138, 162),
+		accent     = Utils.hexToColor3("#0A84FF"),
+	},
+	Light = {
+		name       = "Light",
+		bg         = Color3.fromRGB(232, 232, 240),
+		surface    = Color3.fromRGB(248, 248, 252),
+		surfaceHigh= Color3.fromRGB(255, 255, 255),
+		border     = Color3.fromRGB(195, 195, 212),
+		text       = Color3.fromRGB( 18,  18,  28),
+		subtext    = Color3.fromRGB(102, 102, 120),
+		accent     = Utils.hexToColor3("#0A84FF"),
+	},
 }
 
 function ThemeManager.new()
 	local self = setmetatable({}, ThemeManager)
-	self._themes = { Dark = defaultDark, Light = defaultLight }
-	self._current = self._themes.Dark
+	self._themes    = THEMES
+	self._current   = THEMES.Dark
 	self._listeners = {}
 	return self
 end
 
+function ThemeManager:get()
+	return self._current
+end
+
+-- back-compat alias
 function ThemeManager:getTheme()
 	return self._current
 end
 
-function ThemeManager:setAccent(color3)
-	self._current = Utils.shallowCopy(self._current)
-	self._current.accent = color3
-	self._current.accentGlow = color3
-	self:_emit()
+function ThemeManager:set(name)
+	if self._themes[name] then
+		self._current = self._themes[name]
+		self:_emit()
+	end
 end
 
 function ThemeManager:setTheme(name)
-	local theme = self._themes[name]
-	if not theme then return end
-	self._current = theme
+	self:set(name)
+end
+
+function ThemeManager:setAccent(color)
+	self._current = Utils.copy(self._current)
+	self._current.accent = color
 	self:_emit()
 end
 
-function ThemeManager:registerTheme(name, definition)
-	self._themes[name] = definition
+function ThemeManager:register(name, def)
+	self._themes[name] = def
 end
 
-function ThemeManager:onChanged(fn)
+function ThemeManager:registerTheme(name, def)
+	self:register(name, def)
+end
+
+function ThemeManager:onChange(fn)
 	table.insert(self._listeners, fn)
-	fn(self._current)
-	return {
-		Disconnect = function()
-			for i, v in ipairs(self._listeners) do
-				if v == fn then table.remove(self._listeners, i) break end
-			end
-		end,
-	}
+	return { Disconnect = function()
+		for i, v in ipairs(self._listeners) do
+			if v == fn then table.remove(self._listeners, i); break end
+		end
+	end }
 end
 
 function ThemeManager:_emit()

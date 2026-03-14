@@ -1,140 +1,111 @@
 local Animator = _VertexRequire("src/animator.lua")
-local Utils = _VertexRequire("src/utils.lua")
-local Signal = _VertexRequire("src/signal.lua")
+local Utils    = _VertexRequire("src/utils.lua")
+local Signal   = _VertexRequire("src/signal.lua")
 
 local TabBar = {}
 TabBar.__index = TabBar
 
-local TAB_W      = 82
-local TAB_H      = 28
-local TAB_PAD_V  = 6    -- vertical padding inside the pill background
-local PILL_H     = TAB_H + TAB_PAD_V * 2
+local TAB_W   = 80   -- fixed tab width
+local TAB_H   = 26   -- height of each tab
+local PAD     = 4    -- left padding + gap between tabs
+local PILL_H  = TAB_H + 8   -- pill container height (vertical padding = 4 each side)
 
-function TabBar.new(themeManager)
-	local self = setmetatable({}, TabBar)
-	self.themeManager = themeManager
-	return self
+function TabBar.new(theme)
+	return setmetatable({ theme = theme }, TabBar)
 end
 
--- parent should be the tabRow frame from WindowManager
+-- tabRow: the Frame from WindowManager.tabRow
+-- tabs: array of {id, label}
 function TabBar:create(tabRow, tabs)
-	local theme = self.themeManager:getTheme()
-	local tabCount = #tabs
-	local pillWidth = tabCount * TAB_W + (tabCount - 1) * 4 + 8
+	local t        = self.theme:get()
+	local n        = #tabs
+	local pillW    = PAD + n * TAB_W + (n - 1) * PAD + PAD  -- 4 + n*80 + (n-1)*4 + 4
 
-	-- Pill background container (centered in tabRow)
+	-- Pill background
 	local pill = Instance.new("Frame")
-	pill.Name = "TabPill"
-	pill.Size = UDim2.new(0, pillWidth, 0, PILL_H)
-	pill.AnchorPoint = Vector2.new(0, 0.5)
-	pill.Position = UDim2.new(0, 14, 0.5, 0)
-	pill.BackgroundColor3 = theme.layer
+	pill.Name              = "Pill"
+	pill.Size              = UDim2.new(0, pillW, 0, PILL_H)
+	pill.AnchorPoint       = Vector2.new(0, 0.5)
+	pill.Position          = UDim2.new(0, 14, 0.5, 0)
+	pill.BackgroundColor3  = t.surface
 	pill.BackgroundTransparency = 0.45
-	pill.BorderSizePixel = 0
-	pill.ZIndex = tabRow.ZIndex + 1
-	pill.Parent = tabRow
+	pill.BorderSizePixel   = 0
+	pill.ZIndex            = tabRow.ZIndex + 1
+	pill.Parent            = tabRow
+	Utils.corner(PILL_H / 2).Parent = pill
+	Utils.stroke(1, t.border, 0.45).Parent = pill
 
-	local pillCorner = Utils.createCorner(PILL_H / 2)
-	pillCorner.Parent = pill
+	-- Sliding indicator — positioned mathematically, never touches AbsolutePosition
+	local ind = Instance.new("Frame")
+	ind.Name              = "Indicator"
+	ind.Size              = UDim2.new(0, TAB_W, 0, TAB_H)
+	ind.Position          = UDim2.new(0, PAD, 0, 4)   -- starts at first tab
+	ind.BackgroundColor3  = t.accent
+	ind.BackgroundTransparency = 0.80
+	ind.BorderSizePixel   = 0
+	ind.ZIndex            = pill.ZIndex + 1
+	ind.Parent            = pill
+	Utils.corner(TAB_H / 2).Parent = ind
+	Utils.stroke(1, t.accent, 0.45).Parent = ind
 
-	local pillStroke = Instance.new("UIStroke")
-	pillStroke.Thickness = 1
-	pillStroke.Color = theme.border
-	pillStroke.Transparency = 0.45
-	pillStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	pillStroke.Parent = pill
-
-	-- Sliding indicator (sits behind tab labels)
-	local indicator = Instance.new("Frame")
-	indicator.Name = "Indicator"
-	indicator.Size = UDim2.new(0, TAB_W, 0, TAB_H)
-	indicator.Position = UDim2.new(0, 4, 0, TAB_PAD_V)
-	indicator.BackgroundColor3 = theme.accent
-	indicator.BackgroundTransparency = 0.78
-	indicator.BorderSizePixel = 0
-	indicator.ZIndex = pill.ZIndex + 1
-	indicator.Parent = pill
-
-	local indCorner = Utils.createCorner(TAB_H / 2)
-	indCorner.Parent = indicator
-
-	-- Accent-colored border on indicator
-	local indStroke = Instance.new("UIStroke")
-	indStroke.Thickness = 1
-	indStroke.Color = theme.accent
-	indStroke.Transparency = 0.5
-	indStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	indStroke.Parent = indicator
-
-	local layout = Instance.new("UIListLayout")
-	layout.FillDirection = Enum.FillDirection.Horizontal
-	layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-	layout.VerticalAlignment = Enum.VerticalAlignment.Center
-	layout.Padding = UDim.new(0, 4)
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	-- Tab buttons via UIListLayout + UIPadding so positions are deterministic
+	local layout = Utils.listLayout(Enum.FillDirection.Horizontal, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center, PAD)
 	layout.Parent = pill
+	Utils.padding(0, PAD, PAD, 0, 0).Parent = pill
 
-	local padding = Instance.new("UIPadding")
-	padding.PaddingLeft = UDim.new(0, 4)
-	padding.PaddingRight = UDim.new(0, 4)
-	padding.Parent = pill
+	local sig     = Signal.new()
+	local buttons = {}
+	local current = 0
 
-	local selectedSignal = Signal.new()
-	local buttonRefs = {}
-	local currentIndex = 0
+	-- Calculate indicator X for tab index i (math only, no AbsolutePosition)
+	local function indicatorX(i)
+		-- left padding = PAD, then (i-1) tabs of width TAB_W with PAD gap between
+		return PAD + (i - 1) * (TAB_W + PAD)
+	end
 
-	local function selectTab(index)
-		if index == currentIndex then return end
-		currentIndex = index
-		local button = buttonRefs[index]
-		if not button then return end
+	local function select(i)
+		if i == current then return end
+		current = i
 
-		-- Slide indicator to this tab
-		local absPos = button.AbsolutePosition.X - pill.AbsolutePosition.X
-		Animator.spring(indicator, "Position", UDim2.new(0, absPos, 0, TAB_PAD_V), {
-			damping = 24, stiffness = 320,
-		})
-		Animator.spring(indicator, "Size", UDim2.new(0, button.AbsoluteSize.X, 0, TAB_H), {
-			damping = 24, stiffness = 320,
-		})
+		-- slide indicator
+		Animator.spring(ind, "Position", UDim2.new(0, indicatorX(i), 0, 4), {stiffness=360, damping=28})
+		Animator.spring(ind, "Size",     UDim2.new(0, TAB_W, 0, TAB_H),     {stiffness=360, damping=28})
 
-		-- Update text colors
-		for i, btn in ipairs(buttonRefs) do
-			local targetColor = (i == index) and theme.text or theme.mutedText
-			Animator.spring(btn, "TextColor3", targetColor, { damping = 20, stiffness = 220 })
+		-- text color
+		for j, btn in ipairs(buttons) do
+			Animator.spring(btn, "TextColor3",
+				j == i and t.text or t.subtext,
+				{stiffness=260, damping=22}
+			)
 		end
 
-		selectedSignal:Fire(tabs[index].id or tabs[index].label)
+		sig:Fire(tabs[i].id or tabs[i].label)
 	end
 
 	for i, def in ipairs(tabs) do
 		local btn = Instance.new("TextButton")
-		btn.Name = "Tab_" .. (def.id or i)
-		btn.Size = UDim2.new(0, TAB_W, 0, TAB_H)
+		btn.Name               = "Tab_" .. (def.id or i)
+		btn.Size               = UDim2.new(0, TAB_W, 0, TAB_H)
 		btn.BackgroundTransparency = 1
-		btn.AutoButtonColor = false
-		btn.Text = def.label
-		btn.Font = Enum.Font.GothamMedium
-		btn.TextSize = 13
-		btn.TextColor3 = theme.mutedText
-		btn.ZIndex = pill.ZIndex + 2
-		btn.Parent = pill
-		buttonRefs[i] = btn
+		btn.AutoButtonColor    = false
+		btn.Text               = def.label
+		btn.Font               = Enum.Font.GothamMedium
+		btn.TextSize           = 13
+		btn.TextColor3         = t.subtext
+		btn.ZIndex             = pill.ZIndex + 2
+		btn.Parent             = pill
+		buttons[i]             = btn
 
-		btn.MouseButton1Click:Connect(function()
-			selectTab(i)
-		end)
+		btn.MouseButton1Click:Connect(function() select(i) end)
 	end
 
-	-- Select first tab after layout settles
-	task.delay(0.05, function()
-		selectTab(1)
-	end)
+	-- select first tab immediately (no defer needed since we use math)
+	select(1)
 
 	return {
-		pill       = pill,
-		selected   = selectedSignal,
-		selectTab  = selectTab,
+		pill      = pill,
+		selected  = sig,
+		selectTab = select,
 	}
 end
 
