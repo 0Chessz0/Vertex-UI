@@ -5,23 +5,24 @@ local Signal   = _VertexRequire("src/signal.lua")
 local TabBar = {}
 TabBar.__index = TabBar
 
-local TAB_W   = 80   -- fixed tab width
-local TAB_H   = 26   -- height of each tab
-local PAD     = 4    -- left padding + gap between tabs
-local PILL_H  = TAB_H + 8   -- pill container height (vertical padding = 4 each side)
+local TAB_W  = 80    -- width of each tab button
+local TAB_H  = 26    -- height of each tab button
+local PAD    = 4     -- outer padding + gap between tabs
+local PILL_H = TAB_H + PAD * 2  -- total pill height
 
 function TabBar.new(theme)
 	return setmetatable({ theme = theme }, TabBar)
 end
 
--- tabRow: the Frame from WindowManager.tabRow
--- tabs: array of {id, label}
+-- tabRow : the Frame from WindowManager
+-- tabs   : array of { id, label }
 function TabBar:create(tabRow, tabs)
-	local t        = self.theme:get()
-	local n        = #tabs
-	local pillW    = PAD + n * TAB_W + (n - 1) * PAD + PAD  -- 4 + n*80 + (n-1)*4 + 4
+	local t   = self.theme:get()
+	local n   = #tabs
+	-- pill width = left_pad + (n tabs * width) + ((n-1) gaps) + right_pad
+	local pillW = PAD + n * TAB_W + (n - 1) * PAD + PAD
 
-	-- Pill background
+	-- ── Pill container ─────────────────────────────────────────────
 	local pill = Instance.new("Frame")
 	pill.Name              = "Pill"
 	pill.Size              = UDim2.new(0, pillW, 0, PILL_H)
@@ -35,11 +36,15 @@ function TabBar:create(tabRow, tabs)
 	Utils.corner(PILL_H / 2).Parent = pill
 	Utils.stroke(1, t.border, 0.45).Parent = pill
 
-	-- Sliding indicator — positioned mathematically, never touches AbsolutePosition
+	-- ── Sliding indicator — child of pill but NO layout on it ──────
+	-- IMPORTANT: we do NOT use UIListLayout on the pill itself because
+	-- UIListLayout overrides Position on ALL children, which would
+	-- fight with the spring animation on the indicator.
+	-- Instead we position everything with pure math.
 	local ind = Instance.new("Frame")
 	ind.Name              = "Indicator"
 	ind.Size              = UDim2.new(0, TAB_W, 0, TAB_H)
-	ind.Position          = UDim2.new(0, PAD, 0, 4)   -- starts at first tab
+	ind.Position          = UDim2.new(0, PAD, 0, PAD)  -- starts at tab 1
 	ind.BackgroundColor3  = t.accent
 	ind.BackgroundTransparency = 0.80
 	ind.BorderSizePixel   = 0
@@ -48,18 +53,13 @@ function TabBar:create(tabRow, tabs)
 	Utils.corner(TAB_H / 2).Parent = ind
 	Utils.stroke(1, t.accent, 0.45).Parent = ind
 
-	-- Tab buttons via UIListLayout + UIPadding so positions are deterministic
-	local layout = Utils.listLayout(Enum.FillDirection.Horizontal, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center, PAD)
-	layout.Parent = pill
-	Utils.padding(0, PAD, PAD, 0, 0).Parent = pill
-
+	-- ── Tab buttons — manually positioned, no layout ───────────────
 	local sig     = Signal.new()
 	local buttons = {}
 	local current = 0
 
-	-- Calculate indicator X for tab index i (math only, no AbsolutePosition)
-	local function indicatorX(i)
-		-- left padding = PAD, then (i-1) tabs of width TAB_W with PAD gap between
+	-- Pure math: X position of indicator (and button) for tab index i
+	local function tabX(i)
 		return PAD + (i - 1) * (TAB_W + PAD)
 	end
 
@@ -67,11 +67,10 @@ function TabBar:create(tabRow, tabs)
 		if i == current then return end
 		current = i
 
-		-- slide indicator
-		Animator.spring(ind, "Position", UDim2.new(0, indicatorX(i), 0, 4), {stiffness=360, damping=28})
-		Animator.spring(ind, "Size",     UDim2.new(0, TAB_W, 0, TAB_H),     {stiffness=360, damping=28})
+		-- Spring indicator to this tab
+		Animator.spring(ind, "Position", UDim2.new(0, tabX(i), 0, PAD), {stiffness=380, damping=30})
 
-		-- text color
+		-- Text color for all buttons
 		for j, btn in ipairs(buttons) do
 			Animator.spring(btn, "TextColor3",
 				j == i and t.text or t.subtext,
@@ -86,20 +85,21 @@ function TabBar:create(tabRow, tabs)
 		local btn = Instance.new("TextButton")
 		btn.Name               = "Tab_" .. (def.id or i)
 		btn.Size               = UDim2.new(0, TAB_W, 0, TAB_H)
+		btn.Position           = UDim2.new(0, tabX(i), 0, PAD)  -- manually placed
 		btn.BackgroundTransparency = 1
 		btn.AutoButtonColor    = false
 		btn.Text               = def.label
 		btn.Font               = Enum.Font.GothamMedium
 		btn.TextSize           = 13
 		btn.TextColor3         = t.subtext
-		btn.ZIndex             = pill.ZIndex + 2
+		btn.ZIndex             = pill.ZIndex + 2   -- above indicator
 		btn.Parent             = pill
 		buttons[i]             = btn
 
 		btn.MouseButton1Click:Connect(function() select(i) end)
 	end
 
-	-- select first tab immediately (no defer needed since we use math)
+	-- Select the first tab immediately — no defer needed, pure math
 	select(1)
 
 	return {

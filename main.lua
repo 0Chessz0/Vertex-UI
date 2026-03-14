@@ -1,6 +1,13 @@
 -- Vertex UI — executor loader
 -- Usage: loadstring(game:HttpGet("https://raw.githubusercontent.com/0Chessz0/Vertex-UI/main/main.lua"))()
 
+-- Only load once per session — re-executing does nothing and returns the same instance
+if _G._VertexLoaded then
+	print("[Vertex] Already loaded, skipping.")
+	return _G._VertexInstance
+end
+_G._VertexLoaded = true
+
 local BASE  = "https://raw.githubusercontent.com/0Chessz0/Vertex-UI/main/"
 local cache = {}
 
@@ -19,4 +26,5 @@ local Players  = game:GetService("Players")
 local VertexUI = _VertexRequire("src/ui.lua")
 local ui       = VertexUI.new(Players.LocalPlayer:WaitForChild("PlayerGui"))
 ui:createWindow()
+_G._VertexInstance = ui
 return ui

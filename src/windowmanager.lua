@@ -29,12 +29,17 @@ function WindowManager:createWindow(uiRoot, title, size)
 	local z  = self:_nextZ()
 	size     = size or UDim2.new(0, 520, 0, 400)
 
+	local W = size.X.Offset
+	local H = size.Y.Offset
+
 	-- ── Outer container (transparent, just for clipping + positioning) ──
 	local win = Instance.new("Frame")
 	win.Name              = "VertexWindow"
 	win.Size              = size
-	win.Position          = UDim2.new(0.5, 0, 0.5, 0)
-	win.AnchorPoint       = Vector2.new(0.5, 0.5)
+	-- AnchorPoint MUST be (0,0) so that draggable's offset math works correctly.
+	-- We fake centering by subtracting half-size from the scale-based position.
+	win.AnchorPoint       = Vector2.new(0, 0)
+	win.Position          = UDim2.new(0.5, -W / 2, 0.5, -H / 2)
 	win.BackgroundTransparency = 1
 	win.BorderSizePixel   = 0
 	win.ClipsDescendants  = false
@@ -122,10 +127,10 @@ function WindowManager:createWindow(uiRoot, title, size)
 		cbtn.ZIndex = z + 5
 		cbtn.Parent = closeDot
 		cbtn.MouseButton1Click:Connect(function()
+			-- fade out and hide
 			Animator.spring(win, "BackgroundTransparency", 1, {stiffness=300, damping=26})
-			task.delay(0.2, function()
-				win.Visible = false
-				win.BackgroundTransparency = 1
+			task.delay(0.22, function()
+				if win then win.Visible = false; win.BackgroundTransparency = 1 end
 			end)
 		end)
 	end
@@ -178,14 +183,13 @@ function WindowManager:createWindow(uiRoot, title, size)
 	-- Drag on header
 	Draggable.new(win, header)
 
-	-- Open animation: fade in + slight upward drift
+	-- Open animation: fade in + slight upward drift into place
+	local cx = 0.5 * (uiRoot.AbsoluteSize.X > 0 and uiRoot.AbsoluteSize.X or 800)
+	local cy = 0.5 * (uiRoot.AbsoluteSize.Y > 0 and uiRoot.AbsoluteSize.Y or 600)
+	win.Position = UDim2.new(0, cx - W / 2, 0, cy - H / 2 + 18)
 	win.BackgroundTransparency = 1
-	Animator.spring(win, "BackgroundTransparency", 0, {stiffness=280, damping=26})
-	-- small position offset for entry feel
-	local startPos = UDim2.new(0.5, 0, 0.5, 20)
-	local endPos   = UDim2.new(0.5, 0, 0.5, 0)
-	win.Position   = startPos
-	Animator.spring(win, "Position", endPos, {stiffness=280, damping=26})
+	Animator.spring(win, "Position", UDim2.new(0, cx - W / 2, 0, cy - H / 2), {stiffness=300, damping=28})
+	Animator.spring(win, "BackgroundTransparency", 0, {stiffness=300, damping=28})
 
 	local data = {
 		frame   = win,

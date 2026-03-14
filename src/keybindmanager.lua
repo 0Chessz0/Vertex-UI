@@ -31,6 +31,14 @@ end
 
 function KeybindManager:floatingButton(parent)
 	if self._floatBtn then return self._floatBtn, self._floatSig end
+
+	-- Only create the floating button on touch devices (phone/tablet).
+	-- On PC the keybind (Right Ctrl) is sufficient.
+	local isMobile = UIS.TouchEnabled and not UIS.MouseEnabled
+	if not isMobile then
+		return nil, self._floatSig
+	end
+
 	local Utils = _VertexRequire("src/utils.lua")
 	local btn   = Instance.new("TextButton")
 	btn.Name               = "VertexToggle"
